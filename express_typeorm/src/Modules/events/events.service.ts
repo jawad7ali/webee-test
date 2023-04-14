@@ -1,13 +1,17 @@
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Event } from './entities/event.entity';
 import App from "../../app";
+import { Workshop } from './entities/workshop.entity';
 
 
 export class EventsService {
   private eventRepository: Repository<Event>;
+  private workshopRepository: Repository<Workshop>;
+
 
   constructor(app: App) {
     this.eventRepository = app.getDataSource().getRepository(Event);
+    this.workshopRepository = app.getDataSource().getRepository(Workshop);
   }
 
   async getWarmupEvents() {
@@ -91,8 +95,21 @@ export class EventsService {
     ```
      */
 
+
   async getEventsWithWorkshops() {
-    throw new Error('TODO task 1');
+    // throw new Error('TODO task 1');
+  
+    const events = await this.eventRepository.find();
+    const workshops = await this.workshopRepository.find();
+    const result = events.map((event) => {
+      const eventWorkshops = workshops.filter((workshop) => workshop.eventId === event.id);
+      return {
+        ...event,
+        workshops: eventWorkshops,
+      };
+    }
+    );
+    return result;
   }
 
   /* TODO: complete getFutureEventWithWorkshops so that it returns events with workshops, that have not yet started
@@ -162,6 +179,23 @@ export class EventsService {
     ```
      */
   async getFutureEventWithWorkshops() {
-    throw new Error('TODO task 2');
+    // throw new Error('TODO task 2');
+    const events = await this.eventRepository
+      .createQueryBuilder('event')
+      .where(`(SELECT MIN(start) FROM workshop WHERE eventId = event.id) > :now`, {
+        now: new Date().toISOString(),
+      })
+      .getMany();
+
+    const eventIds = events.map((event) => event.id) as number[];
+    const workshops = await this.workshopRepository.find({
+      order: { eventId: 'ASC', start: 'ASC' },
+      where: { eventId: In(eventIds) },
+    });
+
+    return events.map((event) => ({
+      ...event,
+      workshops: workshops.filter((workshop) => workshop.eventId === event.id),
+    }));
   }
 }
